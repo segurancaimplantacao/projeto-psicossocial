@@ -9,15 +9,15 @@ SUPABASE_KEY = "sb_publishable_u4mWfoCij_AnmwEw_H8H2w_OcPP_ToN"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
-st.title("Painel do Gestor - Versão Atualizada")
+st.title("Painel do Gestor")
 
-# Usando checkboxes fixos para evitar erros de cache do filtro lateral
-st.sidebar.subheader("Filtrar Status:")
+# Usando Checkboxes Fixos para o filtro (evita cache do multiselect)
+st.sidebar.subheader("Filtrar Status no Gráfico:")
 c1 = st.sidebar.checkbox("Sem evidência de risco", value=True)
 c2 = st.sidebar.checkbox("Parcial", value=True)
 c3 = st.sidebar.checkbox("Evidências de risco", value=True)
 
-# Lógica do filtro
+# Monta a lista de filtros
 status_selecionados = []
 if c1: status_selecionados.append("Sem evidência de risco")
 if c2: status_selecionados.append("Parcial")
@@ -41,7 +41,7 @@ if st.button("CARREGAR DADOS"):
         
         df['Status'] = df['resposta'].apply(status_map)
         
-        # Filtra o DataFrame
+        # Filtra o dataframe
         df_plot = df[df['Status'].isin(status_selecionados)]
         
         # Gráfico
@@ -57,4 +57,4 @@ if st.button("CARREGAR DADOS"):
         st.plotly_chart(fig, use_container_width=True)
         st.dataframe(df)
     else:
-        st.error("Nenhum dado encontrado para esta empresa.")
+        st.error("Nenhum dado encontrado.")
