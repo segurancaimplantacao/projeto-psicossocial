@@ -42,7 +42,7 @@ if menu == "Funcionário":
                             }).execute()
                         st.success("Respostas enviadas!")
 
-# --- LÓGICA DO GESTOR (Cálculo Direto e Exato) ---
+# --- LÓGICA DO GESTOR (CÁLCULO BRUTO E EXATO) ---
 else:
     st.title("📊 Painel do Gestor")
     empresas_response = supabase.table("empresas").select("id, nome_empresa").execute()
@@ -60,18 +60,19 @@ else:
                 df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
                 df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
                 
-                # CÁLCULO EXATO: Sem inversões, usa o valor da resposta bruto
+                # AQUI ESTÁ A MUDANÇA: Usamos o valor da resposta BRUTO (sem inversão)
                 df['Legenda_Grafico'] = df['resposta'].map(MAPA_GRAFICO)
                 df['Resposta_Tabela'] = df['resposta'].map(MAPA_TEXTO)
 
-                # Seletor
                 categorias_selecionadas = st.multiselect(
                     "Selecione quais níveis exibir no gráfico:",
                     options=ORDEM_STATUS, default=ORDEM_STATUS
                 )
 
                 df_grafico = df[df['Legenda_Grafico'].isin(categorias_selecionadas)]
+                
                 if not df_grafico.empty:
+                    # Agrupa exatamente como está no banco
                     df_grouped = df_grafico.groupby(['Pergunta', 'Legenda_Grafico']).size().reset_index(name='Contagem')
                     
                     fig = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Legenda_Grafico", 
