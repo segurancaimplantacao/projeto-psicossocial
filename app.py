@@ -16,12 +16,14 @@ menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 # --- MODO FUNCIONÁRIO ---
 if menu == "Funcionário":
     st.title("Acesso ao Questionário")
-    cpf_input = st.text_input("Digite seu CPF (apenas números):")
+    # O usuário deve digitar o CPF no formato que está no banco (ex: 123.456.789-00)
+    cpf_input = st.text_input("Digite seu CPF (ex: 450.367.848-55):")
     
     if cpf_input:
-        cpf_limpo = ''.join(filter(str.isdigit, cpf_input))
-        # Adicionado 'empresa_id' no select para garantir que o insert funcione
-        func = supabase.table("funcionarios").select("id, nome, empresa_id").eq("cpf", cpf_limpo).execute().data
+        # Busca direta, mantendo a formatação (pontos/traços)
+        st.info(f"Buscando CPF: {cpf_input}")
+        
+        func = supabase.table("funcionarios").select("id, nome, empresa_id").eq("cpf", cpf_input).execute().data
         
         if func:
             f = func[0]
@@ -32,7 +34,6 @@ if menu == "Funcionário":
             
             if perguntas:
                 with st.form("form_resp"):
-                    # Mapeamento do radio
                     respostas = {
                         p['id']: st.radio(
                             p['pergunta'], [1, 2, 3], 
@@ -40,7 +41,6 @@ if menu == "Funcionário":
                             horizontal=True
                         ) for p in perguntas
                     }
-                    
                     if st.form_submit_button("Enviar Respostas"):
                         dados = [
                             {
@@ -54,7 +54,7 @@ if menu == "Funcionário":
                         supabase.table("respostas").insert(dados).execute()
                         st.success("Respostas enviadas com sucesso!")
         else:
-            st.error("CPF não encontrado.")
+            st.error("CPF não encontrado. Certifique-se de digitar com pontos e traços exatamente como no cadastro.")
 
 # --- MODO GESTOR ---
 elif menu == "Gestor":
@@ -65,50 +65,47 @@ elif menu == "Gestor":
                                            default=["Sem evidência de risco", "Parcial", "Evidências de risco"])
     
     empresas = supabase.table("empresas").select("id, nome_empresa").execute().data
-    nomes = {e['nome_empresa']: e['id'] for e in empresas}
-    sel = st.selectbox("Selecione a Empresa", list(nomes.keys()))
+    if empresas:
+        nomes = {e['nome_empresa']: e['id'] for e in empresas}
+        sel = st.selectbox("Selecione a Empresa", list(nomes.keys()))
 
-    if st.button("CARREGAR DADOS ATUALIZADOS"):
-        res = supabase.table("respostas").select("resposta, perguntas(pergunta, Tipo), funcionarios(nome)").eq("empresa_id", nomes[sel]).execute()
-        
-        if res.data:
-            df = pd.DataFrame(res.data)
-            st.write(f"Sucesso! Foram encontrados {len(df)} registros.")
+        if st.button("CARREGAR DADOS ATUALIZADOS"):
+            res = supabase.table("respostas").select("resposta, perguntas(pergunta, Tipo), funcionarios(nome)").eq("empresa_id", nomes[sel]).execute()
             
-            df['Pergunta'] = df['perguntas'].apply(lambda x: x['pergunta'])
-            df['Funcionario'] = df['funcionarios'].apply(lambda x: x['nome'])
-            
-            def classificar(row):
-                r = int(row['resposta'])
-                t = str(row['perguntas'].get('Tipo', '')).strip()
-                if r == 2: return "Parcial"
-                if t == "Negativa": return "Evidências de risco" if r == 3 else "Sem evidência de risco"
-                else: return "Sem evidência de risco" if r == 3 else "Evidências de risco"
+            if res.data:
+                df = pd.DataFrame(res.data)
+                df['Pergunta'] = df['perguntas'].apply(lambda x: x['pergunta'])
+                df['Funcionario'] = df['funcionarios'].apply(lambda x: x['nome'])
+                
+                def classificar(row):
+                    r = int(row['resposta'])
+                    t = str(row['perguntas'].get('Tipo', '')).strip()
+                    if r == 2: return "Parcial"
+                    if t == "Negativa": return "Evidências de risco" if r == 3 else "Sem evidência de risco"
+                    else: return "Sem evidência de risco" if r == 3 else "Evidências de risco"
 
-            df['Status'] = df.apply(classificar, axis=1)
-            df['Resposta_Texto'] = df['resposta'].map({1: "Discordo", 2: "Parcial", 3: "Concordo"})
-            
-            # Gráfico
-            df_plot = df[df['Status'].isin(filtro_status)]
-            
-            fig = px.histogram(df_plot, y="Pergunta", color="Status", 
-                               color_discrete_map={
-                                   "Parcial": "#FFEB3B", 
-                                   "Evidências de risco": "#C0504D", 
-                                   "Sem evidência de risco": "#4F81BD"
-                               }, orientation='h', barmode='group')
-            
-            fig.update_layout(
-                plot_bgcolor='white', 
-                yaxis={'categoryorder': 'total descending', 'tickfont': {'color': '#000000', 'size': 14}},
-                xaxis={'tickfont': {'color': '#000000', 'size': 12}}
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            st.subheader("Respostas Individuais")
-            st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Texto']], use_container_width=True, height=400)
-            
-            csv = df[['Funcionario', 'Pergunta', 'Resposta_Texto']].to_csv(index=False).encode('utf-8')
-            st.download_button("Baixar Tabela em CSV", data=csv, file_name="respostas.csv", mime="text/csv")
-        else:
-            st.error("Nenhum dado encontrado para esta empresa.")
+                df['Status'] = df.apply(classificar, axis=1)
+                df['Resposta_Texto'] = df['resposta'].map({1: "Discordo", 2: "Parcial", 3: "Concordo"})
+                
+                df_plot = df[df['Status'].isin(filtro_status)]
+                
+                fig = px.histogram(df_plot, y="Pergunta", color="Status", 
+                                   color_discrete_map={
+                                       "Parcial": "#FFEB3B", 
+                                       "Evidências de risco": "#C0504D", 
+                                       "Sem evidência de risco": "#4F81BD"
+                                   }, orientation='h', barmode='group')
+                
+                fig.update_layout(
+                    plot_bgcolor='white', 
+                    yaxis={'categoryorder': 'total descending', 'tickfont': {'color': '#000000', 'size': 14}},
+                    xaxis={'tickfont': {'color': '#000000', 'size': 12}}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.subheader("Respostas Individuais")
+                st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Texto']], use_container_width=True, height=400)
+                csv = df[['Funcionario', 'Pergunta', 'Resposta_Texto']].to_csv(index=False).encode('utf-8')
+                st.download_button("Baixar Tabela em CSV", data=csv, file_name="respostas.csv", mime="text/csv")
+            else:
+                st.error("Nenhum dado encontrado para esta empresa.")
