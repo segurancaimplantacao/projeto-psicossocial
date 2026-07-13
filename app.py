@@ -10,7 +10,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
 
-# CSS: Preto sólido para a coluna da esquerda, sem negrito extra
+# CSS para garantir fontes pretas, legibilidade e coluna à esquerda
 st.markdown("""
     <style>
     .stApp { font-family: sans-serif; }
@@ -19,12 +19,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Cores ajustadas exatamente conforme sua imagem
-CORES_AJUSTADAS = {
-    "Sem Evidências": "#4169E1",      # Azul conforme imagem
-    "Parcialmente Evidenciado": "#DAA520", # Amarelo/Dourado conforme imagem
-    "Evidências Claras": "#B22222"      # Vermelho conforme imagem
+# Cores ajustadas: Azul (Puro), Amarelo (Gema Intensa), Vermelho (Mantido)
+CORES_FINAIS = {
+    "Sem Evidências": "#1E90FF",         # Azul Dodgger (puro, nada de roxo)
+    "Parcialmente Evidenciado": "#FFD700", # Dourado/Gema frita (intenso)
+    "Evidências Claras": "#B22222"        # Vermelho (mantido)
 }
+
+# Ordem desejada para a legenda e organização
+ORDEM_STATUS = ["Sem Evidências", "Parcialmente Evidenciado", "Evidências Claras"]
 
 menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 
@@ -43,7 +46,7 @@ if menu == "Gestor":
                 df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
                 df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
                 
-                # Mapeamento para as novas legendas
+                # Mapeamento
                 mapa_res = {1: "Evidências Claras", 2: "Parcialmente Evidenciado", 3: "Sem Evidências"}
                 df['Resposta'] = df['resposta'].map(mapa_res)
 
@@ -54,7 +57,8 @@ if menu == "Gestor":
                 with tab1:
                     fig_geral = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Resposta", 
                                        orientation='h', barmode='group',
-                                       color_discrete_map=CORES_AJUSTADAS)
+                                       color_discrete_map=CORES_FINAIS,
+                                       category_orders={"Resposta": ORDEM_STATUS})
                     
                     fig_geral.update_layout(
                         plot_bgcolor='white',
@@ -65,9 +69,10 @@ if menu == "Gestor":
 
                 with tab2:
                     cols = st.columns(3)
-                    for i, (status, cor) in enumerate(CORES_AJUSTADAS.items()):
+                    for i, status in enumerate(ORDEM_STATUS):
                         with cols[i]:
                             df_s = df_grouped[df_grouped['Resposta'] == status]
+                            cor = CORES_FINAIS[status]
                             fig_ind = px.bar(df_s, y="Pergunta", x="Contagem", title=status, 
                                              color_discrete_sequence=[cor], orientation='h')
                             fig_ind.update_layout(showlegend=False, font=dict(color="black"), plot_bgcolor='white')
