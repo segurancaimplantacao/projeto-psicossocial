@@ -10,13 +10,15 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
 
-# Mapeamento para o formulário e tabela de respostas
+# Mapeamento para o formulário e tabela de respostas (Texto original)
 MAPA_TEXTO = {1: "Concordo", 2: "Parcialmente", 3: "Discordo"}
-# Mapeamento para o gráfico (Legendas solicitadas)
+
+# Mapeamento para as cores e legendas do GRÁFICO (Solicitado)
 MAPA_GRAFICO = {1: "Sem Evidências", 2: "Parcialmente Evidenciado", 3: "Evidências Claras"}
 CORES_FINAIS = {"Sem Evidências": "#2A6FB9", "Parcialmente Evidenciado": "#F4D03F", "Evidências Claras": "#D32F2F"}
 ORDEM_STATUS = ["Sem Evidências", "Parcialmente Evidenciado", "Evidências Claras"]
 
+# Perguntas onde a polaridade é invertida (onde Discordar é o sinal positivo)
 perguntas_de_risco = [
     "São observadas atitudes de assédio, ironia ou desrespeito?",
     "O trabalho exige ritmo acelerado sem pausas adequadas?",
@@ -31,8 +33,35 @@ perguntas_de_risco = [
 
 menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 
+# --- LÓGICA DO FUNCIONÁRIO ---
+if menu == "Funcionário":
+    st.title("👤 Área do Funcionário")
+    cpf = st.text_input("Digite seu CPF:")
+    
+    if cpf:
+        func_data = supabase.table("funcionarios").select("*").eq("cpf", cpf).execute().data
+        if func_data:
+            funcionario = func_data[0]
+            st.success(f"Bem-vindo, {funcionario['nome']}!")
+            
+            perguntas_data = supabase.table("perguntas").select("*").execute().data
+            if perguntas_data:
+                with st.form("form_questionario"):
+                    respostas = {}
+                    for p in perguntas_data:
+                        respostas[p['id']] = st.radio(
+                            p['pergunta'], [1, 2, 3], format_func=lambda x: MAPA_TEXTO[x], key=f"p_{p['id']}"
+                        )
+                    if st.form_submit_button("Enviar Respostas"):
+                        for p_id, val in respostas.items():
+                            supabase.table("respostas").insert({
+                                "funcionarios_id": funcionario['id'], "pergunta_id": p_id,
+                                "resposta": val, "empresa_id": funcionario['empresa_id']
+                            }).execute()
+                        st.success("Respostas enviadas!")
+
 # --- LÓGICA DO GESTOR ---
-if menu == "Gestor":
+else:
     st.title("📊 Painel do Gestor")
     empresas_data = supabase.table("empresas").select("id, nome_empresa").execute().data
     
@@ -48,43 +77,38 @@ if menu == "Gestor":
                 df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
                 df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
                 
-                # Inversão de polaridade (mantendo 1,2,3 internamente para calcular)
+                # Cálculo de polaridade (Inverte 1 e 3 se a pergunta for de risco)
                 def aplicar_inversao(row):
                     if row['Pergunta'] in perguntas_de_risco:
                         return 4 - row['resposta']
                     return row['resposta']
                 
                 df['valor_calculado'] = df.apply(aplicar_inversao, axis=1)
-                
-                # Legendas para o gráfico
                 df['Legenda_Grafico'] = df['valor_calculado'].map(MAPA_GRAFICO)
-                # Legendas para a tabela (texto original)
                 df['Resposta_Tabela'] = df['resposta'].map(MAPA_TEXTO)
 
-                # Gráficos Separados por Categoria
-                st.subheader("Análise por Categoria")
-                cols = st.tabs(ORDEM_STATUS)
-                for i, status in enumerate(ORDEM_STATUS):
-                    with cols[i]:
-                        df_s = df[df['Legenda_Grafico'] == status]
-                        if not df_s.empty:
-                            df_grouped = df_s.groupby(['Pergunta', 'Legenda_Grafico']).size().reset_index(name='Contagem')
-                            fig = px.bar(df_grouped, y="Pergunta", x="Contagem", orientation='h', 
-                                         color_discrete_sequence=[CORES_FINAIS[status]])
-                            st.plotly_chart(fig, use_container_width=True)
-                        else:
-                            st.info(f"Sem dados para {status}")
+                # Seletor de categorias para o gráfico
+                categorias_selecionadas = st.multiselect(
+                    "Selecione quais níveis de evidência exibir no gráfico:",
+                    options=ORDEM_STATUS,
+                    default=ORDEM_STATUS
+                )
 
-                # Tabela de Respostas Individuais
+                # Gráfico
+                df_grafico = df[df['Legenda_Grafico'].isin(categorias_selecionadas)]
+                if not df_grafico.empty:
+                    df_grouped = df_grafico.groupby(['Pergunta', 'Legenda_Grafico']).size().reset_index(name='Contagem')
+                    fig = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Legenda_Grafico", 
+                                 orientation='h', barmode='group',
+                                 color_discrete_map=CORES_FINAIS,
+                                 category_orders={"Legenda_Grafico": ORDEM_STATUS})
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Tabela de dados (Mantém os textos originais)
                 st.subheader("Respostas Individuais")
                 st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Tabela']], use_container_width=True)
                 
                 csv = df.to_csv(index=False).encode('utf-8')
                 st.download_button("📥 Baixar CSV", csv, "relatorio.csv", "text/csv")
             else:
-                st.warning("Nenhum dado encontrado.")
-
-# --- LÓGICA FUNCIONÁRIO (Mantida) ---
-else:
-    # ... (seu código de salvamento do formulário aqui)
-    pass
+                st.warning("Nenhum dado encontrado para esta empresa.")
