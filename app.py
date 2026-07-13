@@ -12,6 +12,7 @@ st.set_page_config(layout="wide")
 
 # Mapeamentos Exatos
 MAPA_TEXTO = {1: "Concordo", 2: "Parcialmente", 3: "Discordo"}
+# Mapeamento do Gráfico exatamente como você pediu
 MAPA_GRAFICO = {1: "Sem Evidências", 2: "Parcialmente Evidenciado", 3: "Evidências Claras"}
 CORES_FINAIS = {"Sem Evidências": "#2A6FB9", "Parcialmente Evidenciado": "#F4D03F", "Evidências Claras": "#D32F2F"}
 ORDEM_STATUS = ["Sem Evidências", "Parcialmente Evidenciado", "Evidências Claras"]
@@ -42,9 +43,11 @@ if menu == "Funcionário":
                             }).execute()
                         st.success("Respostas enviadas!")
 
-# --- LÓGICA DO GESTOR (CÁLCULO BRUTO E EXATO) ---
+# --- LÓGICA DO GESTOR (CARREGAMENTO DIRETO) ---
 else:
     st.title("📊 Painel do Gestor")
+    
+    # 1. Busca de empresas sem interrupções
     empresas_response = supabase.table("empresas").select("id, nome_empresa").execute()
     empresas_data = empresas_response.data
     
@@ -52,6 +55,7 @@ else:
         nomes_empresas = {e['nome_empresa']: e['id'] for e in empresas_data}
         empresa_selecionada = st.selectbox("Selecione a Empresa", list(nomes_empresas.keys()))
 
+        # 2. Botão de Carregar sempre presente
         if st.button("CARREGAR DADOS"):
             res = supabase.table("respostas").select("resposta, perguntas(pergunta), funcionarios(nome)").eq("empresa_id", nomes_empresas[empresa_selecionada]).execute()
             
@@ -60,19 +64,20 @@ else:
                 df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
                 df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
                 
-                # AQUI ESTÁ A MUDANÇA: Usamos o valor da resposta BRUTO (sem inversão)
+                # CÁLCULO EXATO: Sem inversão. 1 é sempre 1, 3 é sempre 3.
                 df['Legenda_Grafico'] = df['resposta'].map(MAPA_GRAFICO)
                 df['Resposta_Tabela'] = df['resposta'].map(MAPA_TEXTO)
 
+                # Seletor de categorias
                 categorias_selecionadas = st.multiselect(
                     "Selecione quais níveis exibir no gráfico:",
                     options=ORDEM_STATUS, default=ORDEM_STATUS
                 )
 
+                # Filtragem aplicada APENAS ao gráfico
                 df_grafico = df[df['Legenda_Grafico'].isin(categorias_selecionadas)]
                 
                 if not df_grafico.empty:
-                    # Agrupa exatamente como está no banco
                     df_grouped = df_grafico.groupby(['Pergunta', 'Legenda_Grafico']).size().reset_index(name='Contagem')
                     
                     fig = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Legenda_Grafico", 
@@ -80,12 +85,6 @@ else:
                                  color_discrete_map=CORES_FINAIS,
                                  category_orders={"Legenda_Grafico": ORDEM_STATUS})
                     
+                    # Estilo final solicitado
                     fig.update_layout(yaxis=dict(tickfont=dict(color="black", size=13)))
-                    st.plotly_chart(fig, use_container_width=True)
-
-                st.subheader("Respostas Individuais")
-                st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Tabela']], use_container_width=True)
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button("📥 Baixar CSV", csv, "relatorio.csv", "text/csv")
-            else:
-                st.warning("Nenhum dado encontrado.")
+                    st.plotly_chart(fig, use_container_width
