@@ -87,4 +87,14 @@ else:
                     
                     # Estilo final solicitado
                     fig.update_layout(yaxis=dict(tickfont=dict(color="black", size=13)))
-                    st.plotly_chart(fig, use_container_width
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Tabela de dados (Fiel ao banco)
+                st.subheader("Respostas Individuais")
+                st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Tabela']], use_container_width=True)
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Baixar CSV", csv, "relatorio_final.csv", "text/csv")
+            else:
+                st.warning("Nenhum dado encontrado para esta empresa.")
+    else:
+        st.error("Erro ao carregar lista de empresas do Supabase.")
