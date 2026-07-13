@@ -10,55 +10,18 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
 
-MAPA_ROTULOS = {1: "Concordo", 2: "Parcialmente", 3: "Discordo"}
-CORES_FINAIS = {"Concordo": "#2A6FB9", "Parcialmente": "#F4D03F", "Discordo": "#D32F2F"}
-ORDEM_STATUS = ["Concordo", "Parcialmente", "Discordo"]
-
-perguntas_de_risco = [
-    "São observadas atitudes de assédio, ironia ou desrespeito?",
-    "O trabalho exige ritmo acelerado sem pausas adequadas?",
-    "Existem queixas sobre falta de recursos ou pessoal insuficiente?",
-    "Existem conflitos interpessoais ou isolamento de pessoas?",
-    "A equipe demonstra sinais de fadiga, estresse ou irritabilidade constante?",
-    "Há relatos de sobrecarga de tarefas ou prazos excessivos?",
-    "Há rigidez excessiva em procedimentos, sem margem de flexibilidade?",
-    "Há queixas sobre tratamento desigual ou injustiça?",
-    "Há interrupções frequentes que prejudicam a concentração e a produtividade?"
-]
+# Mapeamento Solicitado
+# 1=Sem Evidências (Azul), 2=Parcialmente (Amarelo), 3=Evidências Claras (Vermelho)
+MAPA_ROTULOS = {1: "Sem Evidências", 2: "Parcialmente Evidenciado", 3: "Evidências Claras"}
+CORES_FINAIS = {"Sem Evidências": "#2A6FB9", "Parcialmente Evidenciado": "#F4D03F", "Evidências Claras": "#D32F2F"}
+ORDEM_STATUS = ["Sem Evidências", "Parcialmente Evidenciado", "Evidências Claras"]
 
 menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 
-# --- LÓGICA DO FUNCIONÁRIO ---
-if menu == "Funcionário":
-    st.title("👤 Área do Funcionário")
-    cpf = st.text_input("Digite seu CPF:")
-    
-    if cpf:
-        func_data = supabase.table("funcionarios").select("*").eq("cpf", cpf).execute().data
-        # O erro estava aqui - certifique-se de que o if termina com ":"
-        if func_data:
-            funcionario = func_data[0]
-            st.success(f"Bem-vindo, {funcionario['nome']}!")
-            
-            perguntas_data = supabase.table("perguntas").select("*").execute().data
-            if perguntas_data:
-                with st.form("form_questionario"):
-                    respostas = {}
-                    for p in perguntas_data:
-                        respostas[p['id']] = st.radio(
-                            p['pergunta'], [1, 2, 3], format_func=lambda x: MAPA_ROTULOS[x], key=f"p_{p['id']}"
-                        )
-                    if st.form_submit_button("Enviar Respostas"):
-                        for p_id, val in respostas.items():
-                            supabase.table("respostas").insert({
-                                "funcionarios_id": funcionario['id'], "pergunta_id": p_id,
-                                "resposta": val, "empresa_id": funcionario['empresa_id']
-                            }).execute()
-                        st.success("Respostas enviadas!")
-
 # --- LÓGICA DO GESTOR ---
-else:
-    st.title("Painel do Gestor")
+if menu == "Gestor":
+    st.title("📊 Painel do Gestor")
+    
     empresas_data = supabase.table("empresas").select("id, nome_empresa").execute().data
     if empresas_data:
         nomes_empresas = {e['nome_empresa']: e['id'] for e in empresas_data}
@@ -66,19 +29,39 @@ else:
 
         if st.button("CARREGAR DADOS"):
             res = supabase.table("respostas").select("resposta, perguntas(pergunta), funcionarios(nome)").eq("empresa_id", nomes_empresas[empresa_selecionada]).execute()
+            
             if res.data:
                 df = pd.DataFrame(res.data)
                 df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
-                
-                def ajustar(row):
-                    if row['Pergunta'] in perguntas_de_risco:
-                        return 4 - row['resposta']
-                    return row['resposta']
+                df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
+                df['Resposta'] = df['resposta'].map(MAPA_ROTULOS)
 
-                df['resposta_ajustada'] = df.apply(ajustar, axis=1)
-                df['Resposta'] = df['resposta_ajustada'].map(MAPA_ROTULOS)
-                
-                df_grouped = df.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem')
+                # 1. Filtro de Perguntas
+                todas_perguntas = df['Pergunta'].unique().tolist()
+                perguntas_selecionadas = st.multiselect("Filtrar Perguntas para o Gráfico", todas_perguntas, default=todas_perguntas)
+                df_filtrado = df[df['Pergunta'].isin(perguntas_selecionadas)]
+
+                # 2. Gráfico
+                df_grouped = df_filtrado.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem')
                 fig = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Resposta", 
-                             orientation='h', barmode='group', color_discrete_map=CORES_FINAIS)
+                             orientation='h', barmode='group',
+                             color_discrete_map=CORES_FINAIS,
+                             category_orders={"Resposta": ORDEM_STATUS})
                 st.plotly_chart(fig, use_container_width=True)
+
+                # 3. Tabela de Dados e Download
+                st.subheader("Respostas Individuais")
+                st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta']], use_container_width=True)
+                
+                # Botão de Download
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Baixar Dados (CSV)",
+                    data=csv,
+                    file_name='relatorio_respostas.csv',
+                    mime='text/csv',
+                )
+            else:
+                st.warning("Nenhum dado encontrado.")
+
+# --- LÓGICA DO FUNCIONÁRIO (Mant
