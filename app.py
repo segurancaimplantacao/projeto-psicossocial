@@ -18,10 +18,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Mapeamento de Rótulos para o Questionário
+# CONFIGURAÇÃO DE RÓTULOS E CORES
+# GARANTINDO QUE CONCORDO SEJA SEMPRE O VALOR 1
 MAPA_ROTULOS = {1: "Concordo", 2: "Parcialmente", 3: "Discordo"}
-
-# Cores para o Gestor
 CORES_FINAIS = {"Concordo": "#2A6FB9", "Parcialmente": "#F4D03F", "Discordo": "#D32F2F"}
 ORDEM_STATUS = ["Concordo", "Parcialmente", "Discordo"]
 
@@ -84,23 +83,22 @@ else:
                 df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
                 df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
                 
+                # APLICA O MESMO MAPA DO FUNCIONÁRIO
                 df['Resposta'] = df['resposta'].map(MAPA_ROTULOS)
+                
+                # Agrupa e contabiliza
                 df_grouped = df.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem')
 
-                tab1, tab2 = st.tabs(["📊 Visão Completa", "📑 Análise Individual por Status"])
+                tab1, tab2 = st.tabs(["📊 Visão Completa", "📑 Detalhes"])
+                
                 with tab1:
                     fig_geral = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Resposta", 
                                        orientation='h', barmode='group',
                                        color_discrete_map=CORES_FINAIS,
                                        category_orders={"Resposta": ORDEM_STATUS})
                     st.plotly_chart(fig_geral, use_container_width=True)
+
                 with tab2:
-                    cols = st.columns(3)
-                    for i, status in enumerate(ORDEM_STATUS):
-                        with cols[i]:
-                            df_s = df_grouped[df_grouped['Resposta'] == status]
-                            fig_ind = px.bar(df_s, y="Pergunta", x="Contagem", title=status, 
-                                             color_discrete_sequence=[CORES_FINAIS[status]], orientation='h')
-                            st.plotly_chart(fig_ind, use_container_width=True)
+                    st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta']], use_container_width=True)
             else:
-                st.warning("Nenhum dado encontrado.")
+                st.warning("Nenhum dado encontrado para esta empresa.")
