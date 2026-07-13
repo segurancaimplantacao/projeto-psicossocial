@@ -18,8 +18,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-CORES_FINAIS = {"Sem Evidências": "#2A6FB9", "Parcialmente Evidenciado": "#F4D03F", "Evidências Claras": "#D32F2F"}
-ORDEM_STATUS = ["Sem Evidências", "Parcialmente Evidenciado", "Evidências Claras"]
+# Mapeamento de Rótulos para o Questionário
+MAPA_ROTULOS = {1: "Concordo", 2: "Parcialmente", 3: "Discordo"}
+
+# Cores para o Gestor
+CORES_FINAIS = {"Concordo": "#2A6FB9", "Parcialmente": "#F4D03F", "Discordo": "#D32F2F"}
+ORDEM_STATUS = ["Concordo", "Parcialmente", "Discordo"]
 
 menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 
@@ -35,7 +39,6 @@ if menu == "Funcionário":
             funcionario = func_data[0]
             st.success(f"Bem-vindo, {funcionario['nome']}!")
             
-            # Carregar perguntas do banco
             perguntas_data = supabase.table("perguntas").select("*").execute().data
             
             if perguntas_data:
@@ -43,16 +46,14 @@ if menu == "Funcionário":
                 with st.form("form_questionario"):
                     respostas = {}
                     for p in perguntas_data:
-                        # Exibe cada pergunta
                         respostas[p['id']] = st.radio(
                             label=p['pergunta'], 
                             options=[1, 2, 3],
-                            format_func=lambda x: {1: "Evidências Claras", 2: "Parcialmente Evidenciado", 3: "Sem Evidências"}[x],
+                            format_func=lambda x: MAPA_ROTULOS[x],
                             key=f"p_{p['id']}"
                         )
                     
                     if st.form_submit_button("Enviar Respostas"):
-                        # Salvar no Supabase (ajuste os campos conforme sua tabela)
                         for p_id, val in respostas.items():
                             supabase.table("respostas").insert({
                                 "funcionarios_id": funcionario['id'],
@@ -83,20 +84,16 @@ else:
                 df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
                 df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
                 
-                mapa_res = {1: "Evidências Claras", 2: "Parcialmente Evidenciado", 3: "Sem Evidências"}
-                df['Resposta'] = df['resposta'].map(mapa_res)
-
+                df['Resposta'] = df['resposta'].map(MAPA_ROTULOS)
                 df_grouped = df.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem')
 
                 tab1, tab2 = st.tabs(["📊 Visão Completa", "📑 Análise Individual por Status"])
-
                 with tab1:
                     fig_geral = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Resposta", 
                                        orientation='h', barmode='group',
                                        color_discrete_map=CORES_FINAIS,
                                        category_orders={"Resposta": ORDEM_STATUS})
                     st.plotly_chart(fig_geral, use_container_width=True)
-
                 with tab2:
                     cols = st.columns(3)
                     for i, status in enumerate(ORDEM_STATUS):
