@@ -5,93 +5,90 @@ import plotly.express as px
 
 # --- CONFIGURAÇÃO ---
 SUPABASE_URL = "https://auiyjfhumfvfdqhhyoch.supabase.co"
-SUPABASE_KEY = "sb_publishable_u4mWfoCij_AnmwEw_H8H2w_OcPP_ToN"
+SUPABASE_KEY = "sb_publishable_u4mWfoCij_AnmwEw_H8H2w_OcPP_ToN" 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-st.set_page_config(layout="wide")
-
-# Mapeamentos ESTÁTICOS - Não altere a ordem para manter o gráfico fixo
-ORDEM_STATUS = ["Sem Evidências", "Parcialmente Evidenciado", "Evidências Claras"]
-CORES_FINAIS = {"Sem Evidências": "#2A6FB9", "Parcialmente Evidenciado": "#F4D03F", "Evidências Claras": "#D32F2F"}
-MAPA_GRAFICO = {1: "Sem Evidências", 2: "Parcialmente Evidenciado", 3: "Evidências Claras"}
-MAPA_TEXTO = {1: "Concordo", 2: "Parcialmente", 3: "Discordo"}
+st.set_page_config(page_title="Gestor 2026", layout="wide")
+st.header("PAINEL GESTOR - DADOS EM TEMPO REAL")
 
 menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 
-# --- LÓGICA DO FUNCIONÁRIO ---
+# --- MODO FUNCIONÁRIO ---
 if menu == "Funcionário":
-    st.title("👤 Área do Funcionário")
-    cpf = st.text_input("Digite seu CPF:")
-    if cpf:
-        func_data = supabase.table("funcionarios").select("*").eq("cpf", cpf).execute().data
-        if func_data:
-            funcionario = func_data[0]
-            perguntas_data = supabase.table("perguntas").select("*").execute().data
-            if perguntas_data:
-                with st.form("form_questionario"):
-                    respostas = {}
-                    for p in perguntas_data:
-                        respostas[p['id']] = st.radio(
-                            p['pergunta'], [1, 2, 3], format_func=lambda x: MAPA_TEXTO[x], key=f"p_{p['id']}"
-                        )
+    st.title("Acesso ao Questionário")
+    cpf_input = st.text_input("Digite seu CPF (apenas números):")
+    if cpf_input:
+        cpf_limpo = ''.join(filter(str.isdigit, cpf_input))
+        func = supabase.table("funcionarios").select("id, nome, empresa_id").eq("cpf", cpf_limpo).execute().data
+        if func:
+            f = func[0]
+            st.success(f"Bem-vindo, {f['nome']}!")
+            perguntas = supabase.table("perguntas").select("id, pergunta").eq("ativa", True).execute().data
+            if perguntas:
+                with st.form("form_resp"):
+                    respostas = {p['id']: st.radio(p['pergunta'], [1, 2, 3], format_func=lambda x: {1:"Discordo", 2:"Parcial", 3:"Concordo"}[x], horizontal=True) for p in perguntas}
                     if st.form_submit_button("Enviar Respostas"):
-                        for p_id, val in respostas.items():
-                            supabase.table("respostas").insert({
-                                "funcionarios_id": funcionario['id'], "pergunta_id": p_id,
-                                "resposta": val, "empresa_id": funcionario['empresa_id']
-                            }).execute()
+                        dados = [{"funcionarios_id": f['id'], "empresa_id": f['empresa_id'], "pergunta_id": p_id, "resposta": nota, "ano": 2026} for p_id, nota in respostas.items()]
+                        supabase.table("respostas").insert(dados).execute()
                         st.success("Respostas enviadas!")
+        else:
+            st.error("CPF não encontrado.")
 
-# --- LÓGICA DO GESTOR (FIXA E IMUTÁVEL) ---
-else:
-    st.title("📊 Painel do Gestor")
-    empresas_response = supabase.table("empresas").select("id, nome_empresa").execute()
-    empresas_data = empresas_response.data
+# --- MODO GESTOR ---
+elif menu == "Gestor":
+    st.title("Painel do Gestor")
     
-    if empresas_data:
-        nomes_empresas = {e['nome_empresa']: e['id'] for e in empresas_data}
-        empresa_selecionada = st.selectbox("Selecione a Empresa", list(nomes_empresas.keys()))
+    filtro_status = st.sidebar.multiselect("Filtrar Status:", 
+                                           options=["Sem evidência de risco", "Parcial", "Evidências de risco"], 
+                                           default=["Sem evidência de risco", "Parcial", "Evidências de risco"])
+    
+    empresas = supabase.table("empresas").select("id, nome_empresa").execute().data
+    nomes = {e['nome_empresa']: e['id'] for e in empresas}
+    sel = st.selectbox("Selecione a Empresa", list(nomes.keys()))
 
-        if st.button("CARREGAR DADOS"):
-            res = supabase.table("respostas").select("resposta, perguntas(pergunta), funcionarios(nome)").eq("empresa_id", nomes_empresas[empresa_selecionada]).execute()
+    if st.button("CARREGAR DADOS ATUALIZADOS"):
+        res = supabase.table("respostas").select("resposta, perguntas(pergunta, Tipo), funcionarios(nome)").eq("empresa_id", nomes[sel]).execute()
+        
+        if res.data:
+            df = pd.DataFrame(res.data)
+            st.write(f"Sucesso! Foram encontrados {len(df)} registros.")
             
-            if res.data:
-                df = pd.DataFrame(res.data)
-                df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
-                df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
-                
-                # Mapeamento direto (sem inversões)
-                df['Legenda_Grafico'] = df['resposta'].map(MAPA_GRAFICO)
-                df['Resposta_Tabela'] = df['resposta'].map(MAPA_TEXTO)
+            df['Pergunta'] = df['perguntas'].apply(lambda x: x['pergunta'])
+            df['Funcionario'] = df['funcionarios'].apply(lambda x: x['nome'])
+            
+            def classificar(row):
+                r = int(row['resposta'])
+                t = str(row['perguntas'].get('Tipo', '')).strip()
+                if r == 2: return "Parcial"
+                if t == "Negativa": return "Evidências de risco" if r == 3 else "Sem evidência de risco"
+                else: return "Sem evidência de risco" if r == 3 else "Evidências de risco"
 
-                # Seletor Multiselect
-                categorias_selecionadas = st.multiselect(
-                    "Selecione quais níveis exibir no gráfico:",
-                    options=ORDEM_STATUS, default=ORDEM_STATUS
-                )
-
-                # Filtragem imutável
-                df_grafico = df[df['Legenda_Grafico'].isin(categorias_selecionadas)]
-                
-                if not df_grafico.empty:
-                    df_grouped = df_grafico.groupby(['Pergunta', 'Legenda_Grafico'], sort=False).size().reset_index(name='Contagem')
-                    
-                    fig = px.bar(
-                        df_grouped, y="Pergunta", x="Contagem", color="Legenda_Grafico", 
-                        orientation='h', barmode='group',
-                        color_discrete_map=CORES_FINAIS,
-                        category_orders={"Legenda_Grafico": ORDEM_STATUS}
-                    )
-                    
-                    # Trava visual
-                    fig.update_layout(yaxis=dict(tickfont=dict(color="black", size=13), categoryorder='total ascending'))
-                    st.plotly_chart(fig, use_container_width=True)
-
-                st.subheader("Respostas Individuais")
-                st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Tabela']], use_container_width=True)
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button("📥 Baixar CSV", csv, "relatorio.csv", "text/csv")
-            else:
-                st.warning("Nenhum dado encontrado para esta empresa.")
-    else:
-        st.error("Erro ao carregar lista de empresas.")
+            df['Status'] = df.apply(classificar, axis=1)
+            df['Resposta_Texto'] = df['resposta'].map({1: "Discordo", 2: "Parcial", 3: "Concordo"})
+            
+            # Gráfico
+            df_plot = df[df['Status'].isin(filtro_status)]
+            
+            fig = px.histogram(df_plot, y="Pergunta", color="Status", 
+                               color_discrete_map={
+                                   "Parcial": "#FFEB3B", 
+                                   "Evidências de risco": "#C0504D", 
+                                   "Sem evidência de risco": "#4F81BD"
+                               }, orientation='h', barmode='group')
+            
+            fig.update_layout(
+                plot_bgcolor='white', 
+                yaxis={'categoryorder': 'total descending', 'tickfont': {'color': '#000000', 'size': 14}},
+                xaxis={'tickfont': {'color': '#000000', 'size': 12}}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # --- TABELA RESTAURADA ---
+            st.subheader("Respostas Individuais")
+            st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Texto']], use_container_width=True, height=400)
+            
+            # --- DOWNLOAD RESTAURADO ---
+            csv = df[['Funcionario', 'Pergunta', 'Resposta_Texto']].to_csv(index=False).encode('utf-8')
+            st.download_button("Baixar Tabela em CSV", data=csv, file_name="respostas.csv", mime="text/csv")
+        else:
+            st.error("Nenhum dado encontrado para esta empresa.")
