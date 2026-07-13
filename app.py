@@ -59,8 +59,57 @@ if menu == "Funcionário":
 # --- LÓGICA DO GESTOR ---
 else:
     st.title("📊 Painel do Gestor")
-    empresas_data = supabase.table("empresas").select("id, nome_empresa").execute().data
+    
+    # Tenta buscar empresas
+    empresas_response = supabase.table("empresas").select("id, nome_empresa").execute()
+    empresas_data = empresas_response.data
     
     if empresas_data:
         nomes_empresas = {e['nome_empresa']: e['id'] for e in empresas_data}
         empresa_selecionada = st.selectbox("Selecione a Empresa", list(nomes_empresas.keys()))
+
+        if st.button("CARREGAR DADOS"):
+            res = supabase.table("respostas").select("resposta, perguntas(pergunta), funcionarios(nome)").eq("empresa_id", nomes_empresas[empresa_selecionada]).execute()
+            
+            if res.data:
+                df = pd.DataFrame(res.data)
+                df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
+                df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
+                
+                # Cálculo de polaridade
+                def aplicar_inversao(row):
+                    if row['Pergunta'] in perguntas_de_risco:
+                        return 4 - row['resposta']
+                    return row['resposta']
+                
+                df['valor_calculado'] = df.apply(aplicar_inversao, axis=1)
+                df['Legenda_Grafico'] = df['valor_calculado'].map(MAPA_GRAFICO)
+                df['Resposta_Tabela'] = df['resposta'].map(MAPA_TEXTO)
+
+                # Seletor
+                categorias_selecionadas = st.multiselect(
+                    "Selecione quais níveis de evidência exibir no gráfico:",
+                    options=ORDEM_STATUS, default=ORDEM_STATUS
+                )
+
+                # Gráfico
+                df_grafico = df[df['Legenda_Grafico'].isin(categorias_selecionadas)]
+                if not df_grafico.empty:
+                    df_grouped = df_grafico.groupby(['Pergunta', 'Legenda_Grafico']).size().reset_index(name='Contagem')
+                    fig = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Legenda_Grafico", 
+                                 orientation='h', barmode='group',
+                                 color_discrete_map=CORES_FINAIS,
+                                 category_orders={"Legenda_Grafico": ORDEM_STATUS})
+                    
+                    fig.update_layout(yaxis=dict(tickfont=dict(color="black", size=13)))
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Tabela e Download
+                st.subheader("Respostas Individuais")
+                st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Tabela']], use_container_width=True)
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Baixar CSV", csv, "relatorio.csv", "text/csv")
+            else:
+                st.warning("Nenhum dado encontrado para esta empresa.")
+    else:
+        st.warning("Não foi possível carregar empresas. Verifique a conexão com o Supabase.")
