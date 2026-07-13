@@ -17,20 +17,42 @@ menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 if menu == "Funcionário":
     st.title("Acesso ao Questionário")
     cpf_input = st.text_input("Digite seu CPF (apenas números):")
+    
     if cpf_input:
         cpf_limpo = ''.join(filter(str.isdigit, cpf_input))
+        # Adicionado 'empresa_id' no select para garantir que o insert funcione
         func = supabase.table("funcionarios").select("id, nome, empresa_id").eq("cpf", cpf_limpo).execute().data
+        
         if func:
             f = func[0]
             st.success(f"Bem-vindo, {f['nome']}!")
+            
+            # Busca perguntas ativas
             perguntas = supabase.table("perguntas").select("id, pergunta").eq("ativa", True).execute().data
+            
             if perguntas:
                 with st.form("form_resp"):
-                    respostas = {p['id']: st.radio(p['pergunta'], [1, 2, 3], format_func=lambda x: {1:"Discordo", 2:"Parcial", 3:"Concordo"}[x], horizontal=True) for p in perguntas}
+                    # Mapeamento do radio
+                    respostas = {
+                        p['id']: st.radio(
+                            p['pergunta'], [1, 2, 3], 
+                            format_func=lambda x: {1:"Discordo", 2:"Parcial", 3:"Concordo"}[x], 
+                            horizontal=True
+                        ) for p in perguntas
+                    }
+                    
                     if st.form_submit_button("Enviar Respostas"):
-                        dados = [{"funcionarios_id": f['id'], "empresa_id": f['empresa_id'], "pergunta_id": p_id, "resposta": nota, "ano": 2026} for p_id, nota in respostas.items()]
+                        dados = [
+                            {
+                                "funcionarios_id": f['id'], 
+                                "empresa_id": f['empresa_id'], 
+                                "pergunta_id": p_id, 
+                                "resposta": nota, 
+                                "ano": 2026
+                            } for p_id, nota in respostas.items()
+                        ]
                         supabase.table("respostas").insert(dados).execute()
-                        st.success("Respostas enviadas!")
+                        st.success("Respostas enviadas com sucesso!")
         else:
             st.error("CPF não encontrado.")
 
@@ -83,11 +105,9 @@ elif menu == "Gestor":
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # --- TABELA RESTAURADA ---
             st.subheader("Respostas Individuais")
             st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Texto']], use_container_width=True, height=400)
             
-            # --- DOWNLOAD RESTAURADO ---
             csv = df[['Funcionario', 'Pergunta', 'Resposta_Texto']].to_csv(index=False).encode('utf-8')
             st.download_button("Baixar Tabela em CSV", data=csv, file_name="respostas.csv", mime="text/csv")
         else:
