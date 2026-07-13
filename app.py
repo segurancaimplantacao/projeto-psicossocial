@@ -10,23 +10,11 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
 
-# Mapeamentos
+# Mapeamentos Exatos
 MAPA_TEXTO = {1: "Concordo", 2: "Parcialmente", 3: "Discordo"}
 MAPA_GRAFICO = {1: "Sem Evidências", 2: "Parcialmente Evidenciado", 3: "Evidências Claras"}
 CORES_FINAIS = {"Sem Evidências": "#2A6FB9", "Parcialmente Evidenciado": "#F4D03F", "Evidências Claras": "#D32F2F"}
 ORDEM_STATUS = ["Sem Evidências", "Parcialmente Evidenciado", "Evidências Claras"]
-
-perguntas_de_risco = [
-    "São observadas atitudes de assédio, ironia ou desrespeito?",
-    "O trabalho exige ritmo acelerado sem pausas adequadas?",
-    "Existem queixas sobre falta de recursos ou pessoal insuficiente?",
-    "Existem conflitos interpessoais ou isolamento de pessoas?",
-    "A equipe demonstra sinais de fadiga, estresse ou irritabilidade constante?",
-    "Há relatos de sobrecarga de tarefas ou prazos excessivos?",
-    "Há rigidez excessiva em procedimentos, sem margem de flexibilidade?",
-    "Há queixas sobre tratamento desigual ou injustiça?",
-    "Há interrupções frequentes que prejudicam a concentração e a produtividade?"
-]
 
 menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 
@@ -34,12 +22,10 @@ menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 if menu == "Funcionário":
     st.title("👤 Área do Funcionário")
     cpf = st.text_input("Digite seu CPF:")
-    
     if cpf:
         func_data = supabase.table("funcionarios").select("*").eq("cpf", cpf).execute().data
         if func_data:
             funcionario = func_data[0]
-            st.success(f"Bem-vindo, {funcionario['nome']}!")
             perguntas_data = supabase.table("perguntas").select("*").execute().data
             if perguntas_data:
                 with st.form("form_questionario"):
@@ -56,11 +42,9 @@ if menu == "Funcionário":
                             }).execute()
                         st.success("Respostas enviadas!")
 
-# --- LÓGICA DO GESTOR ---
+# --- LÓGICA DO GESTOR (Cálculo Direto e Exato) ---
 else:
     st.title("📊 Painel do Gestor")
-    
-    # Tenta buscar empresas
     empresas_response = supabase.table("empresas").select("id, nome_empresa").execute()
     empresas_data = empresas_response.data
     
@@ -76,26 +60,20 @@ else:
                 df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
                 df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
                 
-                # Cálculo de polaridade
-                def aplicar_inversao(row):
-                    if row['Pergunta'] in perguntas_de_risco:
-                        return 4 - row['resposta']
-                    return row['resposta']
-                
-                df['valor_calculado'] = df.apply(aplicar_inversao, axis=1)
-                df['Legenda_Grafico'] = df['valor_calculado'].map(MAPA_GRAFICO)
+                # CÁLCULO EXATO: Sem inversões, usa o valor da resposta bruto
+                df['Legenda_Grafico'] = df['resposta'].map(MAPA_GRAFICO)
                 df['Resposta_Tabela'] = df['resposta'].map(MAPA_TEXTO)
 
                 # Seletor
                 categorias_selecionadas = st.multiselect(
-                    "Selecione quais níveis de evidência exibir no gráfico:",
+                    "Selecione quais níveis exibir no gráfico:",
                     options=ORDEM_STATUS, default=ORDEM_STATUS
                 )
 
-                # Gráfico
                 df_grafico = df[df['Legenda_Grafico'].isin(categorias_selecionadas)]
                 if not df_grafico.empty:
                     df_grouped = df_grafico.groupby(['Pergunta', 'Legenda_Grafico']).size().reset_index(name='Contagem')
+                    
                     fig = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Legenda_Grafico", 
                                  orientation='h', barmode='group',
                                  color_discrete_map=CORES_FINAIS,
@@ -104,12 +82,9 @@ else:
                     fig.update_layout(yaxis=dict(tickfont=dict(color="black", size=13)))
                     st.plotly_chart(fig, use_container_width=True)
 
-                # Tabela e Download
                 st.subheader("Respostas Individuais")
                 st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Tabela']], use_container_width=True)
                 csv = df.to_csv(index=False).encode('utf-8')
                 st.download_button("📥 Baixar CSV", csv, "relatorio.csv", "text/csv")
             else:
-                st.warning("Nenhum dado encontrado para esta empresa.")
-    else:
-        st.warning("Não foi possível carregar empresas. Verifique a conexão com o Supabase.")
+                st.warning("Nenhum dado encontrado.")
