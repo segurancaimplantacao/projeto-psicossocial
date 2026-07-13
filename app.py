@@ -5,56 +5,58 @@ import plotly.express as px
 
 # --- CONFIGURAÇÃO ---
 SUPABASE_URL = "https://auiyjfhumfvfdqhhyoch.supabase.co"
-SUPABASE_KEY = "sb_publishable_u4mWfoCij_AnmwEw_H8H2w_OcPP_ToN" 
+SUPABASE_KEY = "sb_publishable_u4mWfoCij_AnmwEw_H8H2w_OcPP_ToN"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
-st.title("Painel do Gestor")
 
-# Usando Checkboxes Fixos para o filtro (evita cache do multiselect)
-st.sidebar.subheader("Filtrar Status no Gráfico:")
-c1 = st.sidebar.checkbox("Sem evidência de risco", value=True)
-c2 = st.sidebar.checkbox("Parcial", value=True)
-c3 = st.sidebar.checkbox("Evidências de risco", value=True)
+# CSS para garantir fontes pretas, tamanho 16px e leitura confortável
+st.markdown("""
+    <style>
+    .stApp { font-family: sans-serif; font-size: 16px !important; color: #000000 !important; }
+    h1, h2, h3, .stMarkdown, .stText { color: #000000 !important; }
+    div[data-testid="stDataFrame"] { font-size: 14px !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# Monta a lista de filtros
-status_selecionados = []
-if c1: status_selecionados.append("Sem evidência de risco")
-if c2: status_selecionados.append("Parcial")
-if c3: status_selecionados.append("Evidências de risco")
+# Alternância de modo
+menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 
-empresas_data = supabase.table("empresas").select("id, nome_empresa").execute().data
-nomes_empresas = {e['nome_empresa']: e['id'] for e in empresas_data}
-empresa_selecionada = st.selectbox("Selecione a Empresa", list(nomes_empresas.keys()))
-
-if st.button("CARREGAR DADOS"):
-    res = supabase.table("respostas").select("resposta, perguntas(pergunta)").eq("empresa_id", nomes_empresas[empresa_selecionada]).execute()
+if menu == "Funcionário":
+    st.title("Questionário do Funcionário")
+    cpf = st.text_input("Digite seu CPF para iniciar:")
+    if cpf:
+        st.write(f"Bem-vindo. Por favor, responda às perguntas abaixo:")
+        # Aqui entra o seu formulário de preenchimento
+else:
+    st.title("Painel do Gestor")
     
-    if res.data:
-        df = pd.DataFrame(res.data)
-        df['Pergunta'] = df['perguntas'].apply(lambda x: x['pergunta'])
-        
-        def status_map(r):
-            if r == 1: return "Sem evidência de risco"
-            if r == 2: return "Parcial"
-            return "Evidências de risco"
-        
-        df['Status'] = df['resposta'].apply(status_map)
-        
-        # Filtra o dataframe
-        df_plot = df[df['Status'].isin(status_selecionados)]
-        
-        # Gráfico
-        fig = px.bar(df_plot.groupby(['Pergunta', 'Status']).size().reset_index(name='Contagem'), 
-                     y="Pergunta", x="Contagem", color="Status", 
-                     orientation='h',
-                     color_discrete_map={
-                         "Parcial": "#FFEB3B", 
-                         "Sem evidência de risco": "#4F81BD", 
-                         "Evidências de risco": "#C0504D"
-                     }, barmode='group')
-        
-        st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(df)
-    else:
-        st.error("Nenhum dado encontrado.")
+    empresas_data = supabase.table("empresas").select("id, nome_empresa").execute().data
+    if empresas_data:
+        nomes_empresas = {e['nome_empresa']: e['id'] for e in empresas_data}
+        empresa_selecionada = st.selectbox("Selecione a Empresa", list(nomes_empresas.keys()))
+
+        if st.button("CARREGAR DADOS"):
+            res = supabase.table("respostas").select("resposta, perguntas(pergunta)").eq("empresa_id", nomes_empresas[empresa_selecionada]).execute()
+            
+            if res.data:
+                df = pd.DataFrame(res.data)
+                # Extraindo o texto da pergunta
+                df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
+                
+                # Mapeamento para texto legível
+                mapa_respostas = {1: "Discordo", 2: "Parcialmente", 3: "Concordo"}
+                df['Status_Texto'] = df['resposta'].map(mapa_respostas)
+                
+                # Gráfico
+                fig = px.bar(df.groupby(['Pergunta', 'Status_Texto']).size().reset_index(name='Contagem'), 
+                             y="Pergunta", x="Contagem", color="Status_Texto", orientation='h',
+                             color_discrete_map={"Discordo": "#C0504D", "Parcialmente": "#FFEB3B", "Concordo": "#4F81BD"})
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Tabela organizada
+                st.subheader("Detalhes das Respostas")
+                st.dataframe(df[['Pergunta', 'Status_Texto']], use_container_width=True)
+            else:
+                st.warning("Nenhum dado para esta empresa.")
