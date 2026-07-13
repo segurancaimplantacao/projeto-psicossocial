@@ -29,14 +29,40 @@ if menu == "Funcionário":
     cpf = st.text_input("Digite seu CPF:")
     
     if cpf:
-        # Busca no Supabase
         func_data = supabase.table("funcionarios").select("*").eq("cpf", cpf).execute().data
         
         if func_data:
             funcionario = func_data[0]
             st.success(f"Bem-vindo, {funcionario['nome']}!")
-            st.info("O sistema identificou seu cadastro. Carregando questionário...")
-            # INSIRA AQUI O SEU CÓDIGO DE QUESTIONÁRIO ORIGINAL
+            
+            # Carregar perguntas do banco
+            perguntas_data = supabase.table("perguntas").select("*").execute().data
+            
+            if perguntas_data:
+                st.subheader("Questionário Psicossocial")
+                with st.form("form_questionario"):
+                    respostas = {}
+                    for p in perguntas_data:
+                        # Exibe cada pergunta
+                        respostas[p['id']] = st.radio(
+                            label=p['pergunta'], 
+                            options=[1, 2, 3],
+                            format_func=lambda x: {1: "Evidências Claras", 2: "Parcialmente Evidenciado", 3: "Sem Evidências"}[x],
+                            key=f"p_{p['id']}"
+                        )
+                    
+                    if st.form_submit_button("Enviar Respostas"):
+                        # Salvar no Supabase (ajuste os campos conforme sua tabela)
+                        for p_id, val in respostas.items():
+                            supabase.table("respostas").insert({
+                                "funcionarios_id": funcionario['id'],
+                                "pergunta_id": p_id,
+                                "resposta": val,
+                                "empresa_id": funcionario['empresa_id']
+                            }).execute()
+                        st.success("Respostas enviadas com sucesso!")
+            else:
+                st.warning("Nenhuma pergunta encontrada.")
         else:
             st.error("CPF não encontrado.")
 
@@ -79,7 +105,5 @@ else:
                             fig_ind = px.bar(df_s, y="Pergunta", x="Contagem", title=status, 
                                              color_discrete_sequence=[CORES_FINAIS[status]], orientation='h')
                             st.plotly_chart(fig_ind, use_container_width=True)
-
-                st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta']], use_container_width=True)
             else:
                 st.warning("Nenhum dado encontrado.")
