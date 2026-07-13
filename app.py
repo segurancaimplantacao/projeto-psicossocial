@@ -3,17 +3,21 @@ from supabase import create_client
 import pandas as pd
 import plotly.express as px
 
-# Configuração
+# --- CONFIGURAÇÃO ---
 SUPABASE_URL = "https://auiyjfhumfvfdqhhyoch.supabase.co"
 SUPABASE_KEY = "sb_publishable_u4mWfoCij_AnmwEw_H8H2w_OcPP_ToN"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
 
+# CSS: Forçando preto absoluto (#000000) e negrito pesado
 st.markdown("""
     <style>
-    .stApp { font-family: sans-serif; font-size: 16px !important; color: #000000 !important; }
-    h1, h2, h3, .stMarkdown { color: #000000 !important; font-weight: bold !important; }
+    .stApp { font-family: sans-serif; }
+    h1, h2, h3, .stMarkdown { color: #000000 !important; font-weight: 900 !important; }
+    .js-plotly-plot .plotly .main-svg { background: transparent !important; }
+    /* Estilizando as labels do eixo Y do Plotly */
+    .xtick text, .ytick text { fill: #000000 !important; font-weight: bold !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -37,28 +41,35 @@ else:
                 df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
                 df['Resposta'] = df['resposta'].map({1: "Discordo", 2: "Parcialmente", 3: "Concordo"})
 
-                # Criando as abas
+                # Agrupamento para o gráfico: conta quantos funcionários deram cada resposta por pergunta
+                df_grouped = df.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem')
+
+                # Criando abas
                 tab1, tab2 = st.tabs(["📊 Visão Completa", "📑 Análise Individual por Status"])
 
                 with tab1:
-                    st.subheader("Gráfico Geral")
-                    fig_geral = px.bar(df.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem'), 
-                                       y="Pergunta", x="Contagem", color="Resposta", orientation='h',
+                    st.subheader("Gráfico Geral (Barras Agrupadas)")
+                    # barmode='group' separa as barras (o que você queria)
+                    fig_geral = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Resposta", 
+                                       orientation='h', barmode='group',
                                        color_discrete_map={"Discordo": "#B22222", "Parcialmente": "#DAA520", "Concordo": "#00008B"})
+                    
+                    fig_geral.update_layout(
+                        font=dict(color="black", size=14, weight="bold"),
+                        yaxis={'categoryorder': 'total ascending'}
+                    )
                     st.plotly_chart(fig_geral, use_container_width=True)
 
                 with tab2:
                     st.subheader("Gráficos Individuais")
                     cols = st.columns(3)
-                    status_list = ["Discordo", "Parcialmente", "Concordo"]
-                    cores = {"Discordo": "#B22222", "Parcialmente": "#DAA520", "Concordo": "#00008B"}
-                    
-                    for i, status in enumerate(status_list):
+                    status_map = {"Discordo": "#B22222", "Parcialmente": "#DAA520", "Concordo": "#00008B"}
+                    for i, (status, cor) in enumerate(status_map.items()):
                         with cols[i]:
-                            df_s = df[df['Resposta'] == status].groupby('Pergunta').size().reset_index(name='Contagem')
+                            df_s = df_grouped[df_grouped['Resposta'] == status]
                             fig_ind = px.bar(df_s, y="Pergunta", x="Contagem", title=status, 
-                                             color_discrete_sequence=[cores[status]], orientation='h')
-                            fig_ind.update_layout(showlegend=False)
+                                             color_discrete_sequence=[cor], orientation='h')
+                            fig_ind.update_layout(showlegend=False, font=dict(color="black", weight="bold"))
                             st.plotly_chart(fig_ind, use_container_width=True)
 
                 st.subheader("Detalhes das Respostas")
