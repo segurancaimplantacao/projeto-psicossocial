@@ -3,28 +3,27 @@ from supabase import create_client
 import pandas as pd
 import plotly.express as px
 
-# Configuração
+# --- CONFIGURAÇÃO ---
 SUPABASE_URL = "https://auiyjfhumfvfdqhhyoch.supabase.co"
 SUPABASE_KEY = "sb_publishable_u4mWfoCij_AnmwEw_H8H2w_OcPP_ToN"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
 
-# CSS: Preto absoluto e negrito nas fontes, mantendo o gráfico limpo
+# CSS: Preto sólido para a coluna da esquerda, sem negrito extra
 st.markdown("""
     <style>
     .stApp { font-family: sans-serif; }
-    h1, h2, h3, .stMarkdown { color: #000000 !important; font-weight: 900 !important; }
-    /* Garantir texto preto e negrito no eixo Y do gráfico */
-    .js-plotly-plot .plotly .ytick text { fill: #000000 !important; font-weight: bold !important; font-size: 13px !important; }
+    h1, h2, h3, .stMarkdown { color: #000000 !important; }
+    .js-plotly-plot .plotly .ytick text { fill: #000000 !important; font-weight: normal !important; font-size: 13px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# Cores Suavizadas (Pastéis/Desbotados)
-CORES_SUAVES = {
-    "Discordo": "#E57373",      # Vermelho suave
-    "Parcialmente": "#FFF176",  # Amarelo suave
-    "Concordo": "#64B5F6"       # Azul suave
+# Cores ajustadas exatamente conforme sua imagem
+CORES_AJUSTADAS = {
+    "Sem Evidências": "#4169E1",      # Azul conforme imagem
+    "Parcialmente Evidenciado": "#DAA520", # Amarelo/Dourado conforme imagem
+    "Evidências Claras": "#B22222"      # Vermelho conforme imagem
 }
 
 menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
@@ -43,7 +42,10 @@ if menu == "Gestor":
                 df = pd.DataFrame(res.data)
                 df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
                 df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
-                df['Resposta'] = df['resposta'].map({1: "Discordo", 2: "Parcialmente", 3: "Concordo"})
+                
+                # Mapeamento para as novas legendas
+                mapa_res = {1: "Evidências Claras", 2: "Parcialmente Evidenciado", 3: "Sem Evidências"}
+                df['Resposta'] = df['resposta'].map(mapa_res)
 
                 df_grouped = df.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem')
 
@@ -52,23 +54,23 @@ if menu == "Gestor":
                 with tab1:
                     fig_geral = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Resposta", 
                                        orientation='h', barmode='group',
-                                       color_discrete_map=CORES_SUAVES)
+                                       color_discrete_map=CORES_AJUSTADAS)
                     
                     fig_geral.update_layout(
                         plot_bgcolor='white',
-                        font=dict(color="black", size=14, weight="bold"),
+                        font=dict(color="black", size=14),
                         yaxis={'categoryorder': 'total ascending'}
                     )
                     st.plotly_chart(fig_geral, use_container_width=True)
 
                 with tab2:
                     cols = st.columns(3)
-                    for i, (status, cor) in enumerate(CORES_SUAVES.items()):
+                    for i, (status, cor) in enumerate(CORES_AJUSTADAS.items()):
                         with cols[i]:
                             df_s = df_grouped[df_grouped['Resposta'] == status]
                             fig_ind = px.bar(df_s, y="Pergunta", x="Contagem", title=status, 
                                              color_discrete_sequence=[cor], orientation='h')
-                            fig_ind.update_layout(showlegend=False, font=dict(color="black", weight="bold"), plot_bgcolor='white')
+                            fig_ind.update_layout(showlegend=False, font=dict(color="black"), plot_bgcolor='white')
                             st.plotly_chart(fig_ind, use_container_width=True)
 
                 st.subheader("Detalhes das Respostas")
