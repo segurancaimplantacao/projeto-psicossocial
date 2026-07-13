@@ -1,90 +1,58 @@
 import streamlit as st
 from supabase import create_client
 import pandas as pd
-import plotly.express as px
 
-# --- CONFIGURAÇÃO ---
+# Configuração
 SUPABASE_URL = "https://auiyjfhumfvfdqhhyoch.supabase.co"
 SUPABASE_KEY = "sb_publishable_u4mWfoCij_AnmwEw_H8H2w_OcPP_ToN"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="centered")
 
-# CSS para garantir fontes pretas, sem negrito extra e visual profissional
-st.markdown("""
-    <style>
-    .stApp { font-family: sans-serif; }
-    h1, h2, h3, .stMarkdown { color: #000000 !important; }
-    .js-plotly-plot .plotly .ytick text { fill: #000000 !important; font-weight: normal !important; font-size: 13px !important; }
-    </style>
-    """, unsafe_allow_html=True)
+# --- MODO DE OPERAÇÃO ---
+modo = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 
-# Cores Finais Ajustadas (Amarelo clareado 1 tom)
-CORES_FINAIS = {
-    "Sem Evidências": "#2A6FB9",         # Azul (escuro)
-    "Parcialmente Evidenciado": "#F4D03F", # Amarelo (clareado 1 tom)
-    "Evidências Claras": "#D32F2F"        # Vermelho
-}
+try:
+    # Carregamento Geral
+    df_respostas = pd.DataFrame(supabase.table("respostas").select("*").execute().data)
+    df_funcs = pd.DataFrame(supabase.table("funcionarios").select("*").execute().data)
+    df_perguntas = pd.DataFrame(supabase.table("perguntas").select("*").execute().data)
+    df_empresas = pd.DataFrame(supabase.table("empresas").select("*").execute().data)
 
-# Ordem para legenda e organização
-ORDEM_STATUS = ["Sem Evidências", "Parcialmente Evidenciado", "Evidências Claras"]
-
-menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
-
-if menu == "Funcionário":
-    st.title("Questionário")
-    st.info("Formulário ativo.")
-else:
-    st.title("Painel do Gestor")
-    empresas_data = supabase.table("empresas").select("id, nome_empresa").execute().data
-    if empresas_data:
-        nomes_empresas = {e['nome_empresa']: e['id'] for e in empresas_data}
-        empresa_selecionada = st.selectbox("Selecione a Empresa", list(nomes_empresas.keys()))
-
-        if st.button("CARREGAR DADOS"):
-            res = supabase.table("respostas").select("resposta, perguntas(pergunta), funcionarios(nome)").eq("empresa_id", nomes_empresas[empresa_selecionada]).execute()
+    if modo == "Funcionário":
+        st.title("👤 Área do Funcionário")
+        cpf = st.text_input("Digite seu CPF:")
+        if cpf:
+            # Lógica de acesso via CPF
+            st.write("Acesso liberado para o questionário...")
             
-            if res.data:
-                df = pd.DataFrame(res.data)
-                df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
-                df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
-                
-                # Mapeamento
-                mapa_res = {1: "Evidências Claras", 2: "Parcialmente Evidenciado", 3: "Sem Evidências"}
-                df['Resposta'] = df['resposta'].map(mapa_res)
+    elif modo == "Gestor":
+        st.title("🩺 Relatório de Avaliação Individual")
+        
+        # Seletores de Empresa e Funcionário
+        emp_map = dict(zip(df_empresas['nome_empresa'], df_empresas['id']))
+        emp_selecionada = st.selectbox("Selecione uma empresa:", list(emp_map.keys()))
+        
+        funcs_emp = df_funcs[df_funcs['empresa_id'] == emp_map[emp_selecionada]]
+        func_map = dict(zip(funcs_emp['nome'], funcs_emp['id']))
+        func_selecionado = st.selectbox("Selecione o Funcionário:", list(func_map.keys()))
 
-                df_grouped = df.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem')
-
-                # Abas de Visualização
-                tab1, tab2 = st.tabs(["📊 Visão Completa", "📑 Análise Individual por Status"])
-
-                with tab1:
-                    st.subheader("Gráfico Geral (Barras Agrupadas)")
-                    fig_geral = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Resposta", 
-                                       orientation='h', barmode='group',
-                                       color_discrete_map=CORES_FINAIS,
-                                       category_orders={"Resposta": ORDEM_STATUS})
-                    
-                    fig_geral.update_layout(
-                        plot_bgcolor='white',
-                        font=dict(color="black", size=14),
-                        yaxis={'categoryorder': 'total ascending'}
-                    )
-                    st.plotly_chart(fig_geral, use_container_width=True)
-
-                with tab2:
-                    st.subheader("Gráficos Individuais")
-                    cols = st.columns(3)
-                    for i, status in enumerate(ORDEM_STATUS):
-                        with cols[i]:
-                            df_s = df_grouped[df_grouped['Resposta'] == status]
-                            cor = CORES_FINAIS[status]
-                            fig_ind = px.bar(df_s, y="Pergunta", x="Contagem", title=status, 
-                                             color_discrete_sequence=[cor], orientation='h')
-                            fig_ind.update_layout(showlegend=False, font=dict(color="black"), plot_bgcolor='white')
-                            st.plotly_chart(fig_ind, use_container_width=True)
-
-                st.subheader("Detalhes das Respostas")
-                st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta']], use_container_width=True)
+        if st.button("Gerar Análise"):
+            func_id = func_map[func_selecionado]
+            
+            # FILTRO CRÍTICO
+            df_f = df_respostas[df_respostas['funcionarios_id'] == func_id]
+            
+            if df_f.empty:
+                st.error(f"ERRO: Nenhuma resposta encontrada no banco para ID {func_id}.")
+                st.write("Colunas disponíveis em 'respostas':", df_respostas.columns.tolist())
             else:
-                st.warning("Nenhum dado encontrado.")
+                # Merge após garantir que existem dados
+                df_final = df_f.merge(df_perguntas, left_on='pergunta_id', right_on='id')
+                
+                # Cálculo (Exemplo simplificado)
+                st.success(f"Dados encontrados! Total de respostas: {len(df_final)}")
+                st.dataframe(df_final.head())
+
+except Exception as e:
+    st.error(f"Erro no sistema: {e}")
