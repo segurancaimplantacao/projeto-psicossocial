@@ -10,12 +10,10 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
 
-# Mapeamento Global
 MAPA_ROTULOS = {1: "Concordo", 2: "Parcialmente", 3: "Discordo"}
 CORES_FINAIS = {"Concordo": "#2A6FB9", "Parcialmente": "#F4D03F", "Discordo": "#D32F2F"}
 ORDEM_STATUS = ["Concordo", "Parcialmente", "Discordo"]
 
-# Lista de perguntas onde a resposta "Concordo" é um ponto de ATENÇÃO (Risco)
 perguntas_de_risco = [
     "São observadas atitudes de assédio, ironia ou desrespeito?",
     "O trabalho exige ritmo acelerado sem pausas adequadas?",
@@ -37,4 +35,50 @@ if menu == "Funcionário":
     
     if cpf:
         func_data = supabase.table("funcionarios").select("*").eq("cpf", cpf).execute().data
-        if func
+        # O erro estava aqui - certifique-se de que o if termina com ":"
+        if func_data:
+            funcionario = func_data[0]
+            st.success(f"Bem-vindo, {funcionario['nome']}!")
+            
+            perguntas_data = supabase.table("perguntas").select("*").execute().data
+            if perguntas_data:
+                with st.form("form_questionario"):
+                    respostas = {}
+                    for p in perguntas_data:
+                        respostas[p['id']] = st.radio(
+                            p['pergunta'], [1, 2, 3], format_func=lambda x: MAPA_ROTULOS[x], key=f"p_{p['id']}"
+                        )
+                    if st.form_submit_button("Enviar Respostas"):
+                        for p_id, val in respostas.items():
+                            supabase.table("respostas").insert({
+                                "funcionarios_id": funcionario['id'], "pergunta_id": p_id,
+                                "resposta": val, "empresa_id": funcionario['empresa_id']
+                            }).execute()
+                        st.success("Respostas enviadas!")
+
+# --- LÓGICA DO GESTOR ---
+else:
+    st.title("Painel do Gestor")
+    empresas_data = supabase.table("empresas").select("id, nome_empresa").execute().data
+    if empresas_data:
+        nomes_empresas = {e['nome_empresa']: e['id'] for e in empresas_data}
+        empresa_selecionada = st.selectbox("Selecione a Empresa", list(nomes_empresas.keys()))
+
+        if st.button("CARREGAR DADOS"):
+            res = supabase.table("respostas").select("resposta, perguntas(pergunta), funcionarios(nome)").eq("empresa_id", nomes_empresas[empresa_selecionada]).execute()
+            if res.data:
+                df = pd.DataFrame(res.data)
+                df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
+                
+                def ajustar(row):
+                    if row['Pergunta'] in perguntas_de_risco:
+                        return 4 - row['resposta']
+                    return row['resposta']
+
+                df['resposta_ajustada'] = df.apply(ajustar, axis=1)
+                df['Resposta'] = df['resposta_ajustada'].map(MAPA_ROTULOS)
+                
+                df_grouped = df.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem')
+                fig = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Resposta", 
+                             orientation='h', barmode='group', color_discrete_map=CORES_FINAIS)
+                st.plotly_chart(fig, use_container_width=True)
