@@ -19,11 +19,11 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Cores Finais Ajustadas
+# Cores Finais Ajustadas (Amarelo clareado 1 tom)
 CORES_FINAIS = {
-    "Sem Evidências": "#2A6FB9",         # Azul (escurecido, tom sóbrio)
-    "Parcialmente Evidenciado": "#FFD700", # Amarelo (gema intensa)
-    "Evidências Claras": "#D32F2F"        # Vermelho (clareado)
+    "Sem Evidências": "#2A6FB9",         # Azul (escuro)
+    "Parcialmente Evidenciado": "#F4D03F", # Amarelo (clareado 1 tom)
+    "Evidências Claras": "#D32F2F"        # Vermelho
 }
 
 # Ordem para legenda e organização
