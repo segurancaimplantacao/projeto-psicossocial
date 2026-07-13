@@ -10,81 +10,45 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
 
-# CSS para garantir fontes pretas, sem negrito extra e visual profissional
+# CSS para visual profissional
 st.markdown("""
     <style>
     .stApp { font-family: sans-serif; }
     h1, h2, h3, .stMarkdown { color: #000000 !important; }
-    .js-plotly-plot .plotly .ytick text { fill: #000000 !important; font-weight: normal !important; font-size: 13px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# Cores Finais Ajustadas (Amarelo clareado 1 tom)
-CORES_FINAIS = {
-    "Sem Evidências": "#2A6FB9",         # Azul (escuro)
-    "Parcialmente Evidenciado": "#F4D03F", # Amarelo (clareado 1 tom)
-    "Evidências Claras": "#D32F2F"        # Vermelho
-}
-
-# Ordem para legenda e organização
+CORES_FINAIS = {"Sem Evidências": "#2A6FB9", "Parcialmente Evidenciado": "#F4D03F", "Evidências Claras": "#D32F2F"}
 ORDEM_STATUS = ["Sem Evidências", "Parcialmente Evidenciado", "Evidências Claras"]
 
 menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 
+# --- LÓGICA DO FUNCIONÁRIO ---
 if menu == "Funcionário":
-    st.title("Questionário")
-    st.info("Formulário ativo.")
+    st.title("👤 Área do Funcionário")
+    cpf = st.text_input("Digite seu CPF:")
+    
+    if cpf:
+        # Busca o funcionário pelo CPF
+        func_data = supabase.table("funcionarios").select("*").eq("cpf", cpf).execute().data
+        
+        if func_data:
+            funcionario = func_data[0]
+            st.success(f"Bem-vindo, {funcionario['nome']}!")
+            
+            # AQUI: Coloque abaixo a lógica de renderização do seu questionário
+            st.info("O sistema identificou seu cadastro. Carregando questionário...")
+            
+        else:
+            st.error("CPF não encontrado. Verifique o número.")
+
+# --- LÓGICA DO GESTOR ---
 else:
     st.title("Painel do Gestor")
     empresas_data = supabase.table("empresas").select("id, nome_empresa").execute().data
+    
     if empresas_data:
         nomes_empresas = {e['nome_empresa']: e['id'] for e in empresas_data}
         empresa_selecionada = st.selectbox("Selecione a Empresa", list(nomes_empresas.keys()))
 
-        if st.button("CARREGAR DADOS"):
-            res = supabase.table("respostas").select("resposta, perguntas(pergunta), funcionarios(nome)").eq("empresa_id", nomes_empresas[empresa_selecionada]).execute()
-            
-            if res.data:
-                df = pd.DataFrame(res.data)
-                df['Pergunta'] = df['perguntas'].apply(lambda x: x.get('pergunta', ''))
-                df['Funcionario'] = df['funcionarios'].apply(lambda x: x.get('nome', 'N/A') if x else 'N/A')
-                
-                # Mapeamento
-                mapa_res = {1: "Evidências Claras", 2: "Parcialmente Evidenciado", 3: "Sem Evidências"}
-                df['Resposta'] = df['resposta'].map(mapa_res)
-
-                df_grouped = df.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem')
-
-                # Abas de Visualização
-                tab1, tab2 = st.tabs(["📊 Visão Completa", "📑 Análise Individual por Status"])
-
-                with tab1:
-                    st.subheader("Gráfico Geral (Barras Agrupadas)")
-                    fig_geral = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Resposta", 
-                                       orientation='h', barmode='group',
-                                       color_discrete_map=CORES_FINAIS,
-                                       category_orders={"Resposta": ORDEM_STATUS})
-                    
-                    fig_geral.update_layout(
-                        plot_bgcolor='white',
-                        font=dict(color="black", size=14),
-                        yaxis={'categoryorder': 'total ascending'}
-                    )
-                    st.plotly_chart(fig_geral, use_container_width=True)
-
-                with tab2:
-                    st.subheader("Gráficos Individuais")
-                    cols = st.columns(3)
-                    for i, status in enumerate(ORDEM_STATUS):
-                        with cols[i]:
-                            df_s = df_grouped[df_grouped['Resposta'] == status]
-                            cor = CORES_FINAIS[status]
-                            fig_ind = px.bar(df_s, y="Pergunta", x="Contagem", title=status, 
-                                             color_discrete_sequence=[cor], orientation='h')
-                            fig_ind.update_layout(showlegend=False, font=dict(color="black"), plot_bgcolor='white')
-                            st.plotly_chart(fig_ind, use_container_width=True)
-
-                st.subheader("Detalhes das Respostas")
-                st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta']], use_container_width=True)
-            else:
-                st.warning("Nenhum dado encontrado.")
+        if st.button("CARREGAR
