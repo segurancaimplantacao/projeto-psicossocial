@@ -21,7 +21,7 @@ st.markdown("""
 
 # Cores Finais Ajustadas
 CORES_FINAIS = {
-    "Sem Evidências": "#4A90E2",         # Azul (suave)
+    "Sem Evidências": "#2A6FB9",         # Azul (escurecido, tom sóbrio)
     "Parcialmente Evidenciado": "#FFD700", # Amarelo (gema intensa)
     "Evidências Claras": "#D32F2F"        # Vermelho (clareado)
 }
