@@ -10,7 +10,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(layout="wide")
 
-# CSS para garantir fontes pretas, legibilidade e coluna à esquerda
+# CSS para garantir fontes pretas, sem negrito extra e visual profissional
 st.markdown("""
     <style>
     .stApp { font-family: sans-serif; }
@@ -19,19 +19,22 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Cores ajustadas: Azul (Puro), Amarelo (Gema Intensa), Vermelho (Mantido)
+# Cores Finais Ajustadas
 CORES_FINAIS = {
-    "Sem Evidências": "#1E90FF",         # Azul Dodgger (puro, nada de roxo)
-    "Parcialmente Evidenciado": "#FFD700", # Dourado/Gema frita (intenso)
-    "Evidências Claras": "#B22222"        # Vermelho (mantido)
+    "Sem Evidências": "#4A90E2",         # Azul (suave)
+    "Parcialmente Evidenciado": "#FFD700", # Amarelo (gema intensa)
+    "Evidências Claras": "#D32F2F"        # Vermelho (clareado)
 }
 
-# Ordem desejada para a legenda e organização
+# Ordem para legenda e organização
 ORDEM_STATUS = ["Sem Evidências", "Parcialmente Evidenciado", "Evidências Claras"]
 
 menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 
-if menu == "Gestor":
+if menu == "Funcionário":
+    st.title("Questionário")
+    st.info("Formulário ativo.")
+else:
     st.title("Painel do Gestor")
     empresas_data = supabase.table("empresas").select("id, nome_empresa").execute().data
     if empresas_data:
@@ -52,9 +55,11 @@ if menu == "Gestor":
 
                 df_grouped = df.groupby(['Pergunta', 'Resposta']).size().reset_index(name='Contagem')
 
+                # Abas de Visualização
                 tab1, tab2 = st.tabs(["📊 Visão Completa", "📑 Análise Individual por Status"])
 
                 with tab1:
+                    st.subheader("Gráfico Geral (Barras Agrupadas)")
                     fig_geral = px.bar(df_grouped, y="Pergunta", x="Contagem", color="Resposta", 
                                        orientation='h', barmode='group',
                                        color_discrete_map=CORES_FINAIS,
@@ -68,6 +73,7 @@ if menu == "Gestor":
                     st.plotly_chart(fig_geral, use_container_width=True)
 
                 with tab2:
+                    st.subheader("Gráficos Individuais")
                     cols = st.columns(3)
                     for i, status in enumerate(ORDEM_STATUS):
                         with cols[i]:
@@ -80,3 +86,5 @@ if menu == "Gestor":
 
                 st.subheader("Detalhes das Respostas")
                 st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta']], use_container_width=True)
+            else:
+                st.warning("Nenhum dado encontrado.")
