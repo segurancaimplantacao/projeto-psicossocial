@@ -16,15 +16,20 @@ menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 # --- MODO FUNCIONÁRIO ---
 if menu == "Funcionário":
     st.title("Acesso ao Questionário")
+    # O usuário deve digitar o CPF no formato que está no banco (ex: 123.456.789-00)
     cpf_input = st.text_input("Digite seu CPF (ex: 450.367.848-55):")
     
     if cpf_input:
+        # Busca direta, mantendo a formatação (pontos/traços)
         st.info(f"Buscando CPF: {cpf_input}")
+        
         func = supabase.table("funcionarios").select("id, nome, empresa_id").eq("cpf", cpf_input).execute().data
         
         if func:
             f = func[0]
             st.success(f"Bem-vindo, {f['nome']}!")
+            
+            # Busca perguntas ativas
             perguntas = supabase.table("perguntas").select("id, pergunta").eq("ativa", True).execute().data
             
             if perguntas:
@@ -82,7 +87,6 @@ elif menu == "Gestor":
                 df['Status'] = df.apply(classificar, axis=1)
                 df['Resposta_Texto'] = df['resposta'].map({1: "Discordo", 2: "Parcial", 3: "Concordo"})
                 
-                # Gráfico
                 df_plot = df[df['Status'].isin(filtro_status)]
                 
                 fig = px.histogram(df_plot, y="Pergunta", color="Status", 
@@ -93,21 +97,11 @@ elif menu == "Gestor":
                                    }, orientation='h', barmode='group')
                 
                 fig.update_layout(
-                    showlegend=False, 
                     plot_bgcolor='white', 
                     yaxis={'categoryorder': 'total descending', 'tickfont': {'color': '#000000', 'size': 14}},
                     xaxis={'tickfont': {'color': '#000000', 'size': 12}}
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                
-                # --- LEGENDA COMPACTA ABAIXO DO GRÁFICO ---
-                st.markdown("""
-                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; padding: 10px; border-top: 1px solid #ddd; color: #555;">
-                    <span>🔵 Sem evidência de risco</span>
-                    <span>🟡 Parcial</span>
-                    <span>🔴 Evidências de risco</span>
-                </div>
-                """, unsafe_allow_html=True)
                 
                 st.subheader("Respostas Individuais")
                 st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Texto']], use_container_width=True, height=400)
