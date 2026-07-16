@@ -47,7 +47,7 @@ if menu == "Funcionário":
                             } for p_id, nota in respostas.items()
                         ]
                         supabase.table("respostas").insert(dados).execute()
-                        st.success("Respostas enviadas!")
+                        st.success("Respostas enviadas com sucesso!")
         else:
             st.error("CPF não encontrado. Certifique-se de digitar com pontos e traços exatamente como no cadastro.")
 
@@ -55,13 +55,6 @@ if menu == "Funcionário":
 elif menu == "Gestor":
     st.title("Painel do Gestor")
     
-    # LEGENDAS EM LINHA (ECONOMIA DE ESPAÇO)
-    st.write("### Legenda dos Status:")
-    col1, col2, col3 = st.columns(3)
-    col1.markdown("🔵 **Sem evidência de risco**")
-    col2.markdown("🟡 **Parcial**")
-    col3.markdown("🔴 **Evidências de risco**")
-
     filtro_status = st.sidebar.multiselect("Filtrar Status:", 
                                            options=["Sem evidência de risco", "Parcial", "Evidências de risco"], 
                                            default=["Sem evidência de risco", "Parcial", "Evidências de risco"])
@@ -100,12 +93,19 @@ elif menu == "Gestor":
                                    }, orientation='h', barmode='group')
                 
                 fig.update_layout(
-                    showlegend=False, # Removida a legenda lateral automática
+                    showlegend=False, 
                     plot_bgcolor='white', 
                     yaxis={'categoryorder': 'total descending', 'tickfont': {'color': '#000000', 'size': 14}},
                     xaxis={'tickfont': {'color': '#000000', 'size': 12}}
                 )
                 st.plotly_chart(fig, use_container_width=True)
+                
+                # --- LEGENDA ABAIXO DO GRÁFICO ---
+                st.write("### Legenda dos Status:")
+                col1, col2, col3 = st.columns(3)
+                col1.markdown("🔵 **Sem evidência de risco**")
+                col2.markdown("🟡 **Parcial**")
+                col3.markdown("🔴 **Evidências de risco**")
                 
                 st.subheader("Respostas Individuais")
                 st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Texto']], use_container_width=True, height=400)
