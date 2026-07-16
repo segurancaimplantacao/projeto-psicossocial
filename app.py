@@ -70,46 +70,4 @@ elif menu == "Gestor":
             if res.data:
                 df = pd.DataFrame(res.data)
                 df['Pergunta'] = df['perguntas'].apply(lambda x: x['pergunta'])
-                df['Funcionario'] = df['funcionarios'].apply(lambda x: x['nome'])
-                
-                def classificar(row):
-                    r = int(row['resposta'])
-                    t = str(row['perguntas'].get('Tipo', '')).strip()
-                    if r == 2: return "Parcial"
-                    if t == "Negativa": return "Evidências de risco" if r == 3 else "Sem evidência de risco"
-                    else: return "Sem evidência de risco" if r == 3 else "Evidências de risco"
-
-                df['Status'] = df.apply(classificar, axis=1)
-                df['Resposta_Texto'] = df['resposta'].map({1: "Discordo", 2: "Parcial", 3: "Concordo"})
-                
-                # Gráfico
-                df_plot = df[df['Status'].isin(filtro_status)]
-                
-                fig = px.histogram(df_plot, y="Pergunta", color="Status", 
-                                   color_discrete_map={
-                                       "Parcial": "#FFEB3B", 
-                                       "Evidências de risco": "#C0504D", 
-                                       "Sem evidência de risco": "#4F81BD"
-                                   }, orientation='h', barmode='group')
-                
-                fig.update_layout(
-                    showlegend=False, 
-                    plot_bgcolor='white', 
-                    yaxis={'categoryorder': 'total descending', 'tickfont': {'color': '#000000', 'size': 14}},
-                    xaxis={'tickfont': {'color': '#000000', 'size': 12}}
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # --- LEGENDA ABAIXO DO GRÁFICO ---
-                st.write("### Legenda dos Status:")
-                col1, col2, col3 = st.columns(3)
-                col1.markdown("🔵 **Sem evidência de risco**")
-                col2.markdown("🟡 **Parcialmente**")
-                col3.markdown("🔴 **Evidências de risco**")
-                
-                st.subheader("Respostas Individuais")
-                st.dataframe(df[['Funcionario', 'Pergunta', 'Resposta_Texto']], use_container_width=True, height=400)
-                csv = df[['Funcionario', 'Pergunta', 'Resposta_Texto']].to_csv(index=False).encode('utf-8')
-                st.download_button("Baixar Tabela em CSV", data=csv, file_name="respostas.csv", mime="text/csv")
-            else:
-                st.error("Nenhum dado encontrado para esta empresa.")
+                df['Funcionario'] = df['funcionarios'].apply(lambda
