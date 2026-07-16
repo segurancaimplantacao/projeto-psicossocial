@@ -104,7 +104,7 @@ elif menu == "Gestor":
                 st.write("### Legenda dos Status:")
                 col1, col2, col3 = st.columns(3)
                 col1.markdown("🔵 **Sem evidência de risco**")
-                col2.markdown("🟡 **Parcial**")
+                col2.markdown("🟡 **Parcialmente**")
                 col3.markdown("🔴 **Evidências de risco**")
                 
                 st.subheader("Respostas Individuais")
