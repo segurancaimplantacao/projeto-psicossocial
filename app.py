@@ -16,20 +16,15 @@ menu = st.sidebar.radio("Modo de Operação", ["Funcionário", "Gestor"])
 # --- MODO FUNCIONÁRIO ---
 if menu == "Funcionário":
     st.title("Acesso ao Questionário")
-    # O usuário deve digitar o CPF no formato que está no banco (ex: 123.456.789-00)
     cpf_input = st.text_input("Digite seu CPF (ex: 450.367.848-55):")
     
     if cpf_input:
-        # Busca direta, mantendo a formatação (pontos/traços)
         st.info(f"Buscando CPF: {cpf_input}")
-        
         func = supabase.table("funcionarios").select("id, nome, empresa_id").eq("cpf", cpf_input).execute().data
         
         if func:
             f = func[0]
             st.success(f"Bem-vindo, {f['nome']}!")
-            
-            # Busca perguntas ativas
             perguntas = supabase.table("perguntas").select("id, pergunta").eq("ativa", True).execute().data
             
             if perguntas:
@@ -52,7 +47,7 @@ if menu == "Funcionário":
                             } for p_id, nota in respostas.items()
                         ]
                         supabase.table("respostas").insert(dados).execute()
-                        st.success("Respostas enviadas com sucesso!")
+                        st.success("Respostas enviadas!")
         else:
             st.error("CPF não encontrado. Certifique-se de digitar com pontos e traços exatamente como no cadastro.")
 
@@ -60,6 +55,13 @@ if menu == "Funcionário":
 elif menu == "Gestor":
     st.title("Painel do Gestor")
     
+    # LEGENDAS EM LINHA (ECONOMIA DE ESPAÇO)
+    st.write("### Legenda dos Status:")
+    col1, col2, col3 = st.columns(3)
+    col1.markdown("🔵 **Sem evidência de risco**")
+    col2.markdown("🟡 **Parcial**")
+    col3.markdown("🔴 **Evidências de risco**")
+
     filtro_status = st.sidebar.multiselect("Filtrar Status:", 
                                            options=["Sem evidência de risco", "Parcial", "Evidências de risco"], 
                                            default=["Sem evidência de risco", "Parcial", "Evidências de risco"])
@@ -87,6 +89,7 @@ elif menu == "Gestor":
                 df['Status'] = df.apply(classificar, axis=1)
                 df['Resposta_Texto'] = df['resposta'].map({1: "Discordo", 2: "Parcial", 3: "Concordo"})
                 
+                # Gráfico
                 df_plot = df[df['Status'].isin(filtro_status)]
                 
                 fig = px.histogram(df_plot, y="Pergunta", color="Status", 
@@ -97,6 +100,7 @@ elif menu == "Gestor":
                                    }, orientation='h', barmode='group')
                 
                 fig.update_layout(
+                    showlegend=False, # Removida a legenda lateral automática
                     plot_bgcolor='white', 
                     yaxis={'categoryorder': 'total descending', 'tickfont': {'color': '#000000', 'size': 14}},
                     xaxis={'tickfont': {'color': '#000000', 'size': 12}}
